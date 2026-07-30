@@ -47,10 +47,26 @@ public final class NativeBridge {
     }
 
     public static String resultError(String result) {
+        String message;
         try {
-            return new JSONObject(result).optString("error", result);
+            message = new JSONObject(result).optString("error", result);
         } catch (Exception ignored) {
-            return result;
+            message = result;
         }
+        return makeUserFacing(message);
+    }
+
+    private static String makeUserFacing(String message) {
+        if (message == null || message.isEmpty())
+            return "Error desconocido del motor";
+        if (message.equals("Dolphin no pudo abrir la imagen ISO/RVZ/WBFS") ||
+                message.equals("Dolphin no pudo abrir la imagen. Comprueba que no esté dañada")) {
+            return "ModernGekko no pudo leer la imagen. Comprueba que sea ISO, RVZ o WBFS, " +
+                    "que no esté comprimida y que la copia esté completa";
+        }
+        return message
+                .replace("Dolphin rechazó", "El motor rechazó")
+                .replace("Dolphin no pudo", "ModernGekko no pudo")
+                .replace("Dolphin", "el motor");
     }
 }
