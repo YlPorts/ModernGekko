@@ -69,6 +69,10 @@ typedef struct ModernGekkoModuleDesc
 
 typedef const ModernGekkoModuleDesc* (*ModernGekkoGetModuleFn)(void);
 
+// Standalone ModernGekko consumers use the historical StaticRecomp names as
+// aliases. When RecompCore's canonical StaticRecompABI.h was included first,
+// those names already exist and must not be redefined.
+#ifndef STATICRECOMP_ABI_H
 typedef ModernGekkoRange StaticRecompRange;
 typedef ModernGekkoRelSection StaticRecompRelSection;
 typedef ModernGekkoRelModule StaticRecompRelModule;
@@ -77,6 +81,7 @@ typedef ModernGekkoGetModuleFn StaticRecompGetModuleFn;
 
 #define STATICRECOMP_ABI_VERSION MODERNGEKKO_MODULE_ABI_VERSION
 #define STATICRECOMP_GET_MODULE_SYMBOL MODERNGEKKO_GET_MODULE_SYMBOL
+#endif
 
 #ifdef __cplusplus
 }

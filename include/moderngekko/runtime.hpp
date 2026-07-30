@@ -61,6 +61,9 @@ struct RuntimeConfig
   AudioSettings audio;
   InputSettings input;
   WindowSystem window_system = WindowSystem::Default;
+  // Platform-owned pointer used by hosts such as Android ANativeWindow. The
+  // runtime does not release this pointer directly; the platform adapter does.
+  void* native_window = nullptr;
   bool headless = false;
   bool fullscreen = false;
   bool allow_interpreter = false;
