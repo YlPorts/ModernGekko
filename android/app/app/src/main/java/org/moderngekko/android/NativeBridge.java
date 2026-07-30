@@ -1,5 +1,7 @@
 package org.moderngekko.android;
 
+import android.view.Surface;
+
 import org.json.JSONObject;
 
 public final class NativeBridge {
@@ -17,6 +19,18 @@ public final class NativeBridge {
     public static native String inspectDiscImage(String imagePath);
 
     public static native String extractDiscImage(String imagePath, String outputRoot);
+
+    public static native String runGame(String gameRoot, String userDirectory, Surface surface);
+
+    public static native void updateSurface(Surface surface, int width, int height);
+
+    public static native void clearSurface();
+
+    public static native void pauseGame();
+
+    public static native void resumeGame();
+
+    public static native void stopGame();
 
     public static boolean resultIsOk(String result) {
         try {
