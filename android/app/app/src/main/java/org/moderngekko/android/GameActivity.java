@@ -22,12 +22,14 @@ import java.util.concurrent.Executors;
 
 public final class GameActivity extends Activity implements SurfaceHolder.Callback {
     public static final String EXTRA_GAME_ROOT = "game_root";
+    public static final String EXTRA_MODULE_PATH = "module_path";
 
     private final ExecutorService gameThread = Executors.newSingleThreadExecutor();
     private SurfaceView surfaceView;
     private TextView statusView;
     private volatile boolean started;
     private String gameRoot;
+    private String modulePath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,6 +38,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         gameRoot = getIntent().getStringExtra(EXTRA_GAME_ROOT);
         if (gameRoot == null)
             gameRoot = new File(getFilesDir(), "games/current").getAbsolutePath();
+        modulePath = getIntent().getStringExtra(EXTRA_MODULE_PATH);
         setContentView(createView());
         enterImmersiveMode();
     }
@@ -112,6 +115,8 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         gameThread.execute(() -> {
             String result;
             try {
+                if (modulePath == null || modulePath.isEmpty())
+                    throw new IllegalStateException("No se recibió el módulo recompilado ARM64");
                 result = NativeBridge.runGame(
                         gameRoot,
                         getFilesDir().getAbsolutePath(),
