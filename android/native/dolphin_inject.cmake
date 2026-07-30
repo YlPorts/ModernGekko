@@ -1,6 +1,18 @@
+# CMAKE_PROJECT_INCLUDE is evaluated after every project() call, including all
+# vendored dependencies. Only inject ModernGekko into Dolphin's root project.
+if(NOT PROJECT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    return()
+endif()
+
+if(TARGET moderngekko_android)
+    return()
+endif()
+
 if(NOT DEFINED MODERNGEKKO_ROOT)
     message(FATAL_ERROR "MODERNGEKKO_ROOT must point to the ModernGekko checkout")
 endif()
+
+cmake_policy(SET CMP0079 NEW)
 
 add_library(moderngekko_android SHARED
     "${MODERNGEKKO_ROOT}/android/native/moderngekko_jni.cpp"
@@ -9,7 +21,7 @@ add_library(moderngekko_android SHARED
 
 target_include_directories(moderngekko_android PRIVATE
     "${MODERNGEKKO_ROOT}/include"
-    "${PROJECT_SOURCE_DIR}/Source/Core"
+    "${CMAKE_SOURCE_DIR}/Source/Core"
 )
 
 target_compile_features(moderngekko_android PRIVATE cxx_std_23)
@@ -34,5 +46,6 @@ function(moderngekko_finish_android_target)
     )
 endfunction()
 
-# The Dolphin targets are declared later by add_subdirectory(Source).
-cmake_language(DEFER CALL moderngekko_finish_android_target)
+# Dolphin declares common/discio later in add_subdirectory(Source). Defer this
+# operation to the root directory's end so those targets exist first.
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL moderngekko_finish_android_target)
