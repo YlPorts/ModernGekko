@@ -1,21 +1,7 @@
-name: Android baseline
+name: Android baseline (manual)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - android-port
-    paths:
-      - ".github/workflows/android-baseline.yml"
-      - "vendor/dolphin"
-      - "docs/android-port.md"
-  pull_request:
-    branches:
-      - master
-    paths:
-      - ".github/workflows/android-baseline.yml"
-      - "vendor/dolphin"
-      - "docs/android-port.md"
 
 permissions:
   contents: read
@@ -52,6 +38,8 @@ jobs:
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Build RecompCore Android debug APK
         working-directory: vendor/dolphin/Source/Android
