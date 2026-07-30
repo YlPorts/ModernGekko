@@ -20,7 +20,13 @@ public final class NativeBridge {
 
     public static native String extractDiscImage(String imagePath, String outputRoot);
 
-    public static native String runGame(String gameRoot, String userDirectory, Surface surface);
+    public static native String runGame(
+            String gameRoot,
+            String userDirectory,
+            String modulePath,
+            String sysDirectory,
+            Surface surface
+    );
 
     public static native void updateSurface(Surface surface, int width, int height);
 
