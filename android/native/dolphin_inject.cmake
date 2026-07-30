@@ -58,6 +58,23 @@ function(moderngekko_finish_android_target)
         endif()
     endif()
 
+    # androidcommon's stock JNI_OnLoad eagerly resolves Dolphin's full Java UI.
+    # This standalone frontend owns a much smaller Java API, so keep the native
+    # helpers but rename that entry point. ModernGekko's JNI_OnLoad remains the
+    # one exported by libmoderngekko_android.so.
+    target_compile_definitions(androidcommon PRIVATE
+        JNI_OnLoad=Dolphin_IDCache_JNI_OnLoad
+    )
+
+    # The stock Android controller backend also calls Dolphin-specific Java
+    # classes. Keep controller emulation initialized, but omit that backend until
+    # the dedicated ModernGekko touch/gamepad bridge is registered.
+    get_target_property(_input_definitions inputcommon COMPILE_DEFINITIONS)
+    if(_input_definitions)
+        list(REMOVE_ITEM _input_definitions CIFACE_USE_ANDROID -DCIFACE_USE_ANDROID)
+        set_property(TARGET inputcommon PROPERTY COMPILE_DEFINITIONS "${_input_definitions}")
+    endif()
+
     target_link_libraries(moderngekko_android PRIVATE
         audiocommon
         common
