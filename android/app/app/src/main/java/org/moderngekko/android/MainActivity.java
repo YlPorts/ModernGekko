@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,14 +23,18 @@ import java.util.Arrays;
 public final class MainActivity extends Activity {
     private static final int REQUEST_DISC_IMAGE = 1001;
     private static final int REQUEST_EXTRACTED_FOLDER = 1002;
+    private static final int REQUEST_RECOMP_MODULE = 1003;
 
     private TextView statusView;
     private ProgressBar progressBar;
     private Button importImageButton;
     private Button importFolderButton;
+    private Button importModuleButton;
     private Button playButton;
     private Button clearButton;
     private GameImporter importer;
+    private String currentDiscId;
+    private String currentGameSummary;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,14 +111,21 @@ public final class MainActivity extends Activity {
         actionsParams.topMargin = dp(14);
         content.addView(actions, actionsParams);
 
+        importModuleButton = makeButton("Importar g<ID>_recomp.so ARM64");
+        importModuleButton.setEnabled(false);
+        importModuleButton.setOnClickListener(view -> selectRecompModule());
+        LinearLayout.LayoutParams moduleParams = matchWrap();
+        moduleParams.topMargin = dp(8);
+        content.addView(importModuleButton, moduleParams);
+
         playButton = makeButton("Iniciar Kirby");
         playButton.setEnabled(false);
         playButton.setOnClickListener(view -> launchGame());
         LinearLayout.LayoutParams playParams = matchWrap();
-        playParams.topMargin = dp(10);
+        playParams.topMargin = dp(8);
         content.addView(playButton, playParams);
 
-        clearButton = makeButton("Borrar juego importado");
+        clearButton = makeButton("Borrar juego y módulo importados");
         clearButton.setEnabled(false);
         clearButton.setOnClickListener(view -> clearImport());
         LinearLayout.LayoutParams clearParams = matchWrap();
@@ -125,7 +135,8 @@ public final class MainActivity extends Activity {
         TextView note = new TextView(this);
         note.setText(
                 "Usa tu propia copia legal. La imagen o carpeta se procesa dentro del teléfono y " +
-                "no se sube a GitHub. La extracción puede ocupar varios GB."
+                "no se sube a GitHub. La extracción puede ocupar varios GB. El módulo debe ser " +
+                "AArch64 y corresponder exactamente al ID y DOL de tu juego."
         );
         note.setTextSize(13);
         note.setTextColor(Color.DKGRAY);
@@ -194,6 +205,18 @@ public final class MainActivity extends Activity {
         startActivityForResult(intent, REQUEST_EXTRACTED_FOLDER);
     }
 
+    private void selectRecompModule() {
+        if (currentDiscId == null) {
+            statusView.setText("Primero importa y verifica el juego.");
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/octet-stream");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_RECOMP_MODULE);
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -202,10 +225,13 @@ public final class MainActivity extends Activity {
 
         Uri uri = data.getData();
         persistPermission(uri, data.getFlags());
-        if (requestCode == REQUEST_DISC_IMAGE)
+        if (requestCode == REQUEST_DISC_IMAGE) {
             importer.importDiscImage(uri, importListener());
-        else if (requestCode == REQUEST_EXTRACTED_FOLDER)
+        } else if (requestCode == REQUEST_EXTRACTED_FOLDER) {
             importer.importExtractedTree(uri, importListener());
+        } else if (requestCode == REQUEST_RECOMP_MODULE) {
+            importer.importRecompModule(uri, currentDiscId, moduleListener());
+        }
     }
 
     private GameImporter.Listener importListener() {
@@ -228,51 +254,109 @@ public final class MainActivity extends Activity {
         };
     }
 
+    private GameImporter.ModuleListener moduleListener() {
+        setBusy(true, "Preparando módulo ARM64…");
+        return new GameImporter.ModuleListener() {
+            @Override
+            public void onProgress(String message) {
+                runOnUiThread(() -> setBusy(true, message));
+            }
+
+            @Override
+            public void onComplete(File moduleFile) {
+                runOnUiThread(() -> {
+                    setBusy(false, null);
+                    refreshReadiness("✅ Módulo ARM64 instalado\n" + moduleFile.getName());
+                });
+            }
+
+            @Override
+            public void onError(String message, Throwable error) {
+                runOnUiThread(() -> finishWithError(message, error));
+            }
+        };
+    }
+
     private void showInspection(String result, File gameRoot) {
         setBusy(false, null);
         try {
             JSONObject json = new JSONObject(result);
             if (!json.optBoolean("ok", false)) {
+                currentDiscId = null;
+                currentGameSummary = null;
                 statusView.setText("❌ Juego inválido\n\n" + json.optString("error", result));
-                playButton.setEnabled(false);
-                clearButton.setEnabled(gameRoot.exists());
+                updateReadinessControls();
                 return;
             }
 
-            statusView.setText(
+            currentDiscId = json.optString("discId");
+            currentGameSummary =
                     "✅ Juego preparado\n\n" +
                     json.optString("gameName") + "\n" +
-                    "ID: " + json.optString("discId") + "\n" +
+                    "ID: " + currentDiscId + "\n" +
                     "Plataforma: " + json.optString("platform") + "\n" +
                     "DOL: " + shortHash(json.optString("dolSha256")) + "\n" +
-                    "Ruta: " + gameRoot.getAbsolutePath()
-            );
-            playButton.setEnabled(true);
-            clearButton.setEnabled(true);
+                    "Ruta: " + gameRoot.getAbsolutePath();
+            refreshReadiness(null);
         } catch (Exception error) {
             finishWithError("El motor devolvió una respuesta inválida", error);
         }
     }
 
+    private void refreshReadiness(String extraMessage) {
+        File module = currentDiscId == null ? null : importer.getModuleFile(currentDiscId);
+        boolean moduleReady = module != null && module.isFile();
+        StringBuilder text = new StringBuilder();
+        if (currentGameSummary != null)
+            text.append(currentGameSummary);
+        if (extraMessage != null && !extraMessage.isEmpty())
+            text.append("\n\n").append(extraMessage);
+        text.append("\n\nMódulo: ")
+                .append(moduleReady ? "✅ " + module.getName() : "❌ falta g" + currentDiscId + "_recomp.so ARM64");
+        statusView.setText(text.toString());
+        updateReadinessControls();
+    }
+
+    private void updateReadinessControls() {
+        boolean gameReady = currentDiscId != null && importer.getCurrentGameRoot().isDirectory();
+        boolean moduleReady = gameReady && importer.getModuleFile(currentDiscId).isFile();
+        importModuleButton.setEnabled(gameReady);
+        playButton.setEnabled(gameReady && moduleReady);
+        clearButton.setEnabled(importer.getCurrentGameRoot().exists() || moduleReady);
+    }
+
     private void launchGame() {
+        if (currentDiscId == null || !importer.getModuleFile(currentDiscId).isFile()) {
+            statusView.setText("Falta el módulo recompilado ARM64 de esta versión del juego.");
+            return;
+        }
         Intent intent = new Intent(this, GameActivity.class);
         intent.putExtra(GameActivity.EXTRA_GAME_ROOT, importer.getCurrentGameRoot().getAbsolutePath());
+        intent.putExtra(GameActivity.EXTRA_MODULE_PATH, importer.getModuleFile(currentDiscId).getAbsolutePath());
         startActivity(intent);
     }
 
     private void clearImport() {
+        String oldDiscId = currentDiscId;
         importer.clearImportedGame();
-        playButton.setEnabled(false);
-        clearButton.setEnabled(false);
-        statusView.setText("Juego importado eliminado. Puedes seleccionar otra copia.");
+        importer.clearModule(oldDiscId);
+        currentDiscId = null;
+        currentGameSummary = null;
+        updateReadinessControls();
+        statusView.setText("Juego y módulo eliminados. Puedes importar otra copia.");
     }
 
     private void setBusy(boolean busy, String message) {
         progressBar.setVisibility(busy ? View.VISIBLE : View.GONE);
         importImageButton.setEnabled(!busy);
         importFolderButton.setEnabled(!busy);
-        playButton.setEnabled(!busy && importer.getCurrentGameRoot().isDirectory());
-        clearButton.setEnabled(!busy && importer.getCurrentGameRoot().exists());
+        if (busy) {
+            importModuleButton.setEnabled(false);
+            playButton.setEnabled(false);
+            clearButton.setEnabled(false);
+        } else {
+            updateReadinessControls();
+        }
         if (message != null)
             statusView.setText(message);
     }
@@ -297,6 +381,7 @@ public final class MainActivity extends Activity {
     private void setActionsEnabled(boolean enabled) {
         importImageButton.setEnabled(enabled);
         importFolderButton.setEnabled(enabled);
+        importModuleButton.setEnabled(false);
         playButton.setEnabled(false);
         clearButton.setEnabled(false);
     }
