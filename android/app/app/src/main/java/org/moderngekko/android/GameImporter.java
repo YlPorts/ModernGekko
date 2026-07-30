@@ -7,18 +7,26 @@ import android.os.ParcelFileDescriptor;
 
 import androidx.documentfile.provider.DocumentFile;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Imports a user-provided legal game dump into the app's private storage. */
+/** Imports a user-provided legal game dump and its matching ARM64 recomp module. */
 public final class GameImporter {
     public interface Listener {
         void onProgress(String message);
         void onComplete(String nativeResult, File gameRoot);
+        void onError(String message, Throwable error);
+    }
+
+    public interface ModuleListener {
+        void onProgress(String message);
+        void onComplete(File moduleFile);
         void onError(String message, Throwable error);
     }
 
@@ -31,6 +39,13 @@ public final class GameImporter {
 
     public File getCurrentGameRoot() {
         return new File(context.getFilesDir(), "games/current");
+    }
+
+    public File getModuleFile(String discId) {
+        return new File(
+                new File(context.getFilesDir(), "StaticRecompModules"),
+                "g" + discId + "_recomp.so"
+        );
     }
 
     public void importExtractedTree(Uri treeUri, Listener listener) {
@@ -107,8 +122,46 @@ public final class GameImporter {
         });
     }
 
+    public void importRecompModule(Uri moduleUri, String discId, ModuleListener listener) {
+        executor.execute(() -> {
+            File temporary = null;
+            try {
+                if (discId == null || discId.length() != 6 || !discId.matches("[A-Za-z0-9]{6}"))
+                    throw new IOException("Primero importa un juego con un ID válido");
+
+                File modules = new File(context.getFilesDir(), "StaticRecompModules");
+                if (!modules.exists() && !modules.mkdirs())
+                    throw new IOException("No se pudo crear la carpeta de módulos");
+
+                listener.onProgress("Copiando el módulo recompilado…");
+                temporary = new File(modules, "module-importing.so");
+                deleteRecursively(temporary);
+                copyFile(moduleUri, temporary);
+
+                listener.onProgress("Verificando ELF ARM64…");
+                validateArm64Elf(temporary);
+
+                File destination = getModuleFile(discId);
+                deleteRecursively(destination);
+                if (!temporary.renameTo(destination))
+                    throw new IOException("No se pudo instalar el módulo recompilado");
+                temporary = null;
+                listener.onComplete(destination);
+            } catch (Throwable error) {
+                if (temporary != null)
+                    deleteRecursively(temporary);
+                listener.onError(error.getMessage() == null ? error.toString() : error.getMessage(), error);
+            }
+        });
+    }
+
     public void clearImportedGame() {
         deleteRecursively(getCurrentGameRoot());
+    }
+
+    public void clearModule(String discId) {
+        if (discId != null && !discId.isEmpty())
+            deleteRecursively(getModuleFile(discId));
     }
 
     public void shutdown() {
@@ -186,6 +239,32 @@ public final class GameImporter {
                 output.write(buffer, 0, read);
             output.getFD().sync();
         }
+    }
+
+    private static void validateArm64Elf(File file) throws IOException {
+        byte[] header = new byte[64];
+        try (BufferedInputStream input = new BufferedInputStream(new FileInputStream(file))) {
+            int offset = 0;
+            while (offset < header.length) {
+                int read = input.read(header, offset, header.length - offset);
+                if (read < 0)
+                    break;
+                offset += read;
+            }
+            if (offset < header.length)
+                throw new IOException("El archivo es demasiado pequeño para ser una biblioteca ELF");
+        }
+
+        if (header[0] != 0x7f || header[1] != 'E' || header[2] != 'L' || header[3] != 'F')
+            throw new IOException("El archivo seleccionado no es una biblioteca ELF");
+        if (header[4] != 2)
+            throw new IOException("El módulo no es ELF de 64 bits");
+        if (header[5] != 1)
+            throw new IOException("El módulo no usa el formato little-endian de Android");
+
+        int machine = (header[18] & 0xff) | ((header[19] & 0xff) << 8);
+        if (machine != 183)
+            throw new IOException("El módulo no fue compilado para ARM64 (AArch64)");
     }
 
     private static String safeName(String value) {
