@@ -12,7 +12,9 @@ public final class NativeBridge {
     private NativeBridge() {
     }
 
-    public static native String nativeVersion();
+    public static String nativeVersion() {
+        return "ModernGekko Android 0.4 · DiscIO + runtime StaticRecomp";
+    }
 
     public static native String inspectExtractedGame(String gameRoot);
 
