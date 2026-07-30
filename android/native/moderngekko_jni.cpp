@@ -14,7 +14,12 @@
 #include <string_view>
 
 #if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+#include <android/native_window_jni.h>
+
+#include "android_platform.hpp"
+#include "android_session.hpp"
 #include "DiscIO/DiscExtractor.h"
+#include "DiscIO/Enums.h"
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeDisc.h"
@@ -93,6 +98,11 @@ std::string ErrorJson(std::string_view message)
   return "{\"ok\":false,\"error\":\"" + JsonEscape(message) + "\"}";
 }
 
+std::string SuccessJson(std::string_view message)
+{
+  return "{\"ok\":true,\"message\":\"" + JsonEscape(message) + "\"}";
+}
+
 std::string InspectionJson(const moderngekko::GameMetadata& game)
 {
   std::ostringstream json;
@@ -153,16 +163,40 @@ std::string InspectExtracted(const std::string& root)
 }
 
 #if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+DiscIO::Partition SelectPartition(const DiscIO::VolumeDisc& volume)
+{
+  DiscIO::Partition partition = volume.GetGamePartition();
+  if (partition == DiscIO::PARTITION_NONE && !volume.GetPartitions().empty())
+    partition = volume.GetPartitions().front();
+  return partition;
+}
+
+std::string InspectDisc(const std::string& path)
+{
+  std::unique_ptr<DiscIO::VolumeDisc> volume = DiscIO::CreateDisc(path);
+  if (!volume)
+    return ErrorJson("Dolphin no pudo abrir la imagen ISO/RVZ/WBFS");
+
+  const DiscIO::Partition partition = SelectPartition(*volume);
+  const std::string id = volume->GetGameID(partition);
+  if (id.size() != 6)
+    return ErrorJson("la imagen no contiene un ID de disco válido");
+  std::string name = volume->GetInternalName(partition);
+  if (name.empty())
+    name = id;
+  const bool wii = DiscIO::IsWii(volume->GetVolumeType());
+  return "{\"ok\":true,\"discId\":\"" + JsonEscape(id) +
+         "\",\"gameName\":\"" + JsonEscape(name) + "\",\"platform\":\"" +
+         (wii ? "Wii" : "GameCube") + "\"}";
+}
+
 std::string ExtractDisc(const std::string& image_path, const std::string& output_root)
 {
   std::unique_ptr<DiscIO::VolumeDisc> volume = DiscIO::CreateDisc(image_path);
   if (!volume)
     return ErrorJson("Dolphin no pudo abrir la imagen. Comprueba que no esté dañada");
 
-  DiscIO::Partition partition = volume->GetGamePartition();
-  if (partition == DiscIO::PARTITION_NONE && !volume->GetPartitions().empty())
-    partition = volume->GetPartitions().front();
-
+  const DiscIO::Partition partition = SelectPartition(*volume);
   const DiscIO::FileSystem* filesystem = volume->GetFileSystem(partition);
   if (!filesystem || !filesystem->IsValid())
     return ErrorJson("no se pudo leer el sistema de archivos de la partición del juego");
@@ -200,9 +234,9 @@ JNIEXPORT jstring JNICALL
 Java_org_moderngekko_android_NativeBridge_nativeVersion(JNIEnv* env, jclass)
 {
 #if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
-  return ToJString(env, "ModernGekko Android bridge 0.2 + Dolphin DiscIO");
+  return ToJString(env, "ModernGekko Android 0.3 · DiscIO + runtime StaticRecomp");
 #else
-  return ToJString(env, "ModernGekko Android bridge 0.2 (inspector only)");
+  return ToJString(env, "ModernGekko Android 0.3 · inspector only");
 #endif
 }
 
@@ -235,7 +269,13 @@ Java_org_moderngekko_android_NativeBridge_inspectDiscImage(JNIEnv* env, jclass,
   try
   {
     const std::string path = FromJString(env, image_path);
-    return ToJString(env, path.empty() ? ErrorJson("image path is empty") : InspectRawDiscHeader(path));
+    if (path.empty())
+      return ToJString(env, ErrorJson("image path is empty"));
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+    return ToJString(env, InspectDisc(path));
+#else
+    return ToJString(env, InspectRawDiscHeader(path));
+#endif
   }
   catch (const std::exception& error)
   {
@@ -272,19 +312,79 @@ Java_org_moderngekko_android_NativeBridge_extractDiscImage(JNIEnv* env, jclass,
 }
 
 JNIEXPORT jstring JNICALL
-Java_org_moderngekko_android_NativeBridge_runGame(JNIEnv* env, jclass, jstring, jstring, jobject)
+Java_org_moderngekko_android_NativeBridge_runGame(JNIEnv* env, jclass, jstring game_root,
+                                                   jstring user_directory, jstring module_path,
+                                                   jstring sys_directory, jobject surface)
 {
-  return ToJString(env, ErrorJson(
-      "La importación ya está lista. La conexión final del renderizador y el módulo ARM64 sigue en construcción."));
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
+  if (!window)
+    return ToJString(env, ErrorJson("Android no proporcionó una superficie válida"));
+
+  moderngekko::android::SessionResult result;
+  try
+  {
+    result = moderngekko::android::RunSession(
+        FromJString(env, game_root), FromJString(env, user_directory),
+        FromJString(env, module_path), FromJString(env, sys_directory), window);
+  }
+  catch (const std::exception& error)
+  {
+    result = {false, error.what()};
+  }
+  catch (...)
+  {
+    result = {false, "excepción nativa desconocida al iniciar el juego"};
+  }
+  ANativeWindow_release(window);
+  return ToJString(env, result.ok ? SuccessJson(result.message) : ErrorJson(result.message));
+#else
+  (void)game_root;
+  (void)user_directory;
+  (void)module_path;
+  (void)sys_directory;
+  (void)surface;
+  return ToJString(env, ErrorJson("this APK was built without the Dolphin runtime"));
+#endif
 }
 
 JNIEXPORT void JNICALL
-Java_org_moderngekko_android_NativeBridge_updateSurface(JNIEnv*, jclass, jobject, jint, jint)
+Java_org_moderngekko_android_NativeBridge_updateSurface(JNIEnv* env, jclass, jobject surface,
+                                                         jint, jint)
 {
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  ANativeWindow* window = surface ? ANativeWindow_fromSurface(env, surface) : nullptr;
+  moderngekko::android::UpdateSurface(window);
+  if (window)
+    ANativeWindow_release(window);
+#endif
 }
 
-JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_clearSurface(JNIEnv*, jclass) {}
-JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_pauseGame(JNIEnv*, jclass) {}
-JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_resumeGame(JNIEnv*, jclass) {}
-JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_stopGame(JNIEnv*, jclass) {}
+JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_clearSurface(JNIEnv*, jclass)
+{
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  moderngekko::android::ClearSurface();
+#endif
+}
+
+JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_pauseGame(JNIEnv*, jclass)
+{
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  moderngekko::android::PauseSession();
+#endif
+}
+
+JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_resumeGame(JNIEnv*, jclass)
+{
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  moderngekko::android::ResumeSession();
+#endif
+}
+
+JNIEXPORT void JNICALL Java_org_moderngekko_android_NativeBridge_stopGame(JNIEnv*, jclass)
+{
+#if defined(MODERNGEKKO_ANDROID_WITH_DOLPHIN)
+  moderngekko::android::StopSession();
+#endif
+}
 }
