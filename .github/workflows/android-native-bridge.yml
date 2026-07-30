@@ -9,8 +9,8 @@ on:
       - ".github/workflows/android-native-bridge.yml"
       - "android/native/**"
       - "android/app/**"
-      - "include/moderngekko/game.hpp"
-      - "src/runtime/game.cpp"
+      - "include/moderngekko/**"
+      - "src/runtime/**"
       - "vendor/dolphin"
   pull_request:
     branches:
@@ -19,9 +19,13 @@ on:
       - ".github/workflows/android-native-bridge.yml"
       - "android/native/**"
       - "android/app/**"
-      - "include/moderngekko/game.hpp"
-      - "src/runtime/game.cpp"
+      - "include/moderngekko/**"
+      - "src/runtime/**"
       - "vendor/dolphin"
+
+concurrency:
+  group: android-port-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
