@@ -87,14 +87,11 @@ public:
     m_window = window;
   }
 
+  static AndroidPlatform* s_active;
+
 private:
   mutable std::mutex m_surface_mutex;
   ANativeWindow* m_window = nullptr;
-
-  static AndroidPlatform* s_active;
-
-  friend void UpdateSurface(ANativeWindow* window);
-  friend void ClearSurface();
 };
 
 AndroidPlatform* AndroidPlatform::s_active = nullptr;
