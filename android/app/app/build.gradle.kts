@@ -11,8 +11,8 @@ android {
         applicationId = "org.moderngekko.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -22,7 +22,8 @@ android {
             cmake {
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
-                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+                    "-DMODERNGEKKO_ANDROID_WITH_DOLPHIN=ON"
                 )
                 targets += listOf("moderngekko_android")
             }
@@ -50,4 +51,8 @@ android {
     packaging {
         jniLibs.useLegacyPackaging = true
     }
+}
+
+dependencies {
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
