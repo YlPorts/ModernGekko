@@ -101,7 +101,7 @@ SessionResult RunSession(const std::string& game_root, const std::string& user_d
     return Failure("juego extraído inválido: " + inspected.error);
 
   const ModernGekkoModuleRequirements requirements = {
-      MODERNGEKKO_CPU_ABI_VERSION, static_cast<std::uint32_t>(sizeof(CPUState)),
+      GXRUNTIME_CPU_ABI_VERSION, static_cast<std::uint32_t>(sizeof(CPUState)),
       inspected.metadata->disc_id.c_str()};
   ModuleLibrary validation_library;
   const ModuleLoadResult module_result = validation_library.Open(module_path, requirements);
@@ -171,7 +171,7 @@ SessionResult RunSession(const std::string& game_root, const std::string& user_d
   Core::Stop(system);
   Core::Shutdown(system);
   cleanup.m_booted = false;
-  system.GetJitInterface().SetStaticRecompModuleSource({});
+  system.GetJitInterface().SetStaticRecompModuleSource(StaticRecompModuleSource{});
   return {true, "la sesión terminó correctamente"};
 }
 
