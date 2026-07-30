@@ -3,6 +3,7 @@ plugins {
 }
 
 val repositoryRoot = rootProject.projectDir.parentFile.parentFile
+val useCcache = project.hasProperty("useCcache")
 
 android {
     namespace = "org.moderngekko.android"
@@ -13,8 +14,8 @@ android {
         applicationId = "org.moderngekko.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -22,7 +23,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments += listOf(
+                val nativeArguments = mutableListOf(
                     "-DANDROID_STL=c++_static",
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
                     "-DMODERNGEKKO_ROOT=${repositoryRoot.absolutePath}",
@@ -39,6 +40,11 @@ android {
                     "-DUSE_MGBA=OFF",
                     "-DUSE_UPNP=OFF"
                 )
+                if (useCcache) {
+                    nativeArguments += "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+                    nativeArguments += "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+                }
+                arguments += nativeArguments
                 targets += listOf("moderngekko_android")
             }
         }
