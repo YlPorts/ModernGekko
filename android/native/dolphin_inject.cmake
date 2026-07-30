@@ -4,17 +4,12 @@ endif()
 
 add_library(moderngekko_android SHARED
     "${MODERNGEKKO_ROOT}/android/native/moderngekko_jni.cpp"
-    "${MODERNGEKKO_ROOT}/android/native/android_host.cpp"
     "${MODERNGEKKO_ROOT}/src/runtime/game.cpp"
-    "${MODERNGEKKO_ROOT}/src/runtime/module.cpp"
-    "${MODERNGEKKO_ROOT}/src/runtime/module_loader.cpp"
 )
 
 target_include_directories(moderngekko_android PRIVATE
     "${MODERNGEKKO_ROOT}/include"
     "${PROJECT_SOURCE_DIR}/Source/Core"
-    "${PROJECT_SOURCE_DIR}/Source/Android"
-    "${PROJECT_SOURCE_DIR}/GXRuntime/include"
 )
 
 target_compile_features(moderngekko_android PRIVATE cxx_std_23)
@@ -32,12 +27,8 @@ set_target_properties(moderngekko_android PROPERTIES
 
 function(moderngekko_finish_android_target)
     target_link_libraries(moderngekko_android PRIVATE
-        androidcommon
         common
-        core
         discio
-        inputcommon
-        uicommon
         android
         log
     )
