@@ -24,7 +24,7 @@ on:
       - "vendor/dolphin"
 
 concurrency:
-  group: android-port-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -34,6 +34,10 @@ jobs:
   build-arm64:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 4G
+      CCACHE_COMPRESS: "true"
 
     steps:
       - name: Checkout repository and RecompCore
@@ -51,15 +55,27 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android toolchain
+      - name: Install Android toolchain and ccache
         shell: bash
         run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache
           sdkmanager \
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;29.0.14206865" \
             "cmake;3.22.1" \
             "platform-tools"
+          ccache --zero-stats
+          ccache --max-size "$CCACHE_MAXSIZE"
+
+      - name: Restore native compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: android-ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            android-ccache-${{ runner.os }}-
 
       - name: Set up Gradle 9.4.1
         uses: gradle/actions/setup-gradle@v4
@@ -79,6 +95,8 @@ jobs:
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
             -DANDROID_STL=c++_shared \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build standalone ARM64 inspector
@@ -99,7 +117,8 @@ jobs:
       - name: Build Android game importer APK
         shell: bash
         run: |
-          gradle --no-daemon --stacktrace -p android/app :app:assembleDebug
+          gradle --no-daemon --stacktrace -PuseCcache=true -p android/app :app:assembleDebug
+          ccache --show-stats
 
       - name: Package artifacts
         shell: bash
