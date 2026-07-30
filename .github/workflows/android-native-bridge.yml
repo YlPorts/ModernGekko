@@ -1,0 +1,87 @@
+name: Android native bridge
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - android-port
+    paths:
+      - ".github/workflows/android-native-bridge.yml"
+      - "android/native/**"
+      - "include/moderngekko/game.hpp"
+      - "src/runtime/game.cpp"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/android-native-bridge.yml"
+      - "android/native/**"
+      - "include/moderngekko/game.hpp"
+      - "src/runtime/game.cpp"
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK and Ninja
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "ndk;29.0.14206865" "cmake;3.22.1" "platform-tools"
+
+      - name: Configure ARM64 bridge
+        shell: bash
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/29.0.14206865"
+          "$ANDROID_SDK_ROOT/cmake/3.22.1/bin/cmake" \
+            -S android/native \
+            -B build/android-native-arm64 \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build ARM64 bridge
+        shell: bash
+        run: |
+          "$ANDROID_SDK_ROOT/cmake/3.22.1/bin/cmake" \
+            --build build/android-native-arm64 \
+            --target moderngekko_android \
+            --parallel 2
+
+      - name: Verify native library
+        shell: bash
+        run: |
+          test -f build/android-native-arm64/libmoderngekko_android.so
+          file build/android-native-arm64/libmoderngekko_android.so
+          readelf -h build/android-native-arm64/libmoderngekko_android.so | grep -q "AArch64"
+
+      - name: Package native library
+        shell: bash
+        run: |
+          mkdir -p artifact/arm64-v8a
+          cp build/android-native-arm64/libmoderngekko_android.so artifact/arm64-v8a/
+
+      - name: Upload ARM64 bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: ModernGekko-Android-Native-arm64-v8a
+          path: artifact
+          if-no-files-found: error
+          retention-days: 14
