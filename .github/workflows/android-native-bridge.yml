@@ -1,4 +1,4 @@
-name: Android native bridge
+name: Android importer
 
 on:
   workflow_dispatch:
@@ -11,6 +11,7 @@ on:
       - "android/app/**"
       - "include/moderngekko/game.hpp"
       - "src/runtime/game.cpp"
+      - "vendor/dolphin"
   pull_request:
     branches:
       - master
@@ -20,6 +21,7 @@ on:
       - "android/app/**"
       - "include/moderngekko/game.hpp"
       - "src/runtime/game.cpp"
+      - "vendor/dolphin"
 
 permissions:
   contents: read
@@ -27,13 +29,13 @@ permissions:
 jobs:
   build-arm64:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository and RecompCore
         uses: actions/checkout@v4
         with:
-          submodules: false
+          submodules: recursive
           fetch-depth: 1
 
       - name: Set up Java 17
@@ -60,7 +62,7 @@ jobs:
         with:
           gradle-version: "9.4.1"
 
-      - name: Configure standalone ARM64 bridge
+      - name: Configure standalone ARM64 inspector
         shell: bash
         run: |
           NDK="$ANDROID_SDK_ROOT/ndk/29.0.14206865"
@@ -74,7 +76,7 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build standalone ARM64 bridge
+      - name: Build standalone ARM64 inspector
         shell: bash
         run: |
           "$ANDROID_SDK_ROOT/cmake/3.22.1/bin/cmake" \
@@ -82,14 +84,14 @@ jobs:
             --target moderngekko_android \
             --parallel 2
 
-      - name: Verify native library
+      - name: Verify standalone native library
         shell: bash
         run: |
           test -f build/android-native-arm64/libmoderngekko_android.so
           file build/android-native-arm64/libmoderngekko_android.so
           readelf -h build/android-native-arm64/libmoderngekko_android.so | grep -q "AArch64"
 
-      - name: Build JNI smoke-test APK
+      - name: Build Android game importer APK
         shell: bash
         run: |
           gradle --no-daemon --stacktrace -p android/app :app:assembleDebug
@@ -100,13 +102,13 @@ jobs:
           mkdir -p artifact/native/arm64-v8a artifact/apk
           cp build/android-native-arm64/libmoderngekko_android.so artifact/native/arm64-v8a/
           find android/app/app/build/outputs/apk/debug \
-            -type f -name "*.apk" -exec cp {} artifact/apk/ModernGekko-Android-Bridge-debug.apk \;
-          test -f artifact/apk/ModernGekko-Android-Bridge-debug.apk
+            -type f -name "*.apk" -exec cp {} artifact/apk/ModernGekko-Android-Importer-debug.apk \;
+          test -f artifact/apk/ModernGekko-Android-Importer-debug.apk
 
-      - name: Upload Android bridge artifacts
+      - name: Upload Android importer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ModernGekko-Android-Bridge-arm64-v8a
+          name: ModernGekko-Android-Importer-arm64-v8a
           path: artifact
           if-no-files-found: error
           retention-days: 14
