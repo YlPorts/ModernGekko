@@ -111,15 +111,19 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             return;
         started = true;
         Surface surface = holder.getSurface();
-        statusView.setText("Iniciando ModernGekko…");
+        statusView.setText("Preparando archivos Sys de Dolphin…");
         gameThread.execute(() -> {
             String result;
             try {
                 if (modulePath == null || modulePath.isEmpty())
                     throw new IllegalStateException("No se recibió el módulo recompilado ARM64");
+                File sysDirectory = DolphinAssets.prepare(getApplicationContext());
+                runOnUiThread(() -> statusView.setText("Iniciando ModernGekko…"));
                 result = NativeBridge.runGame(
                         gameRoot,
                         getFilesDir().getAbsolutePath(),
+                        modulePath,
+                        sysDirectory.getAbsolutePath(),
                         surface
                 );
             } catch (Throwable error) {
