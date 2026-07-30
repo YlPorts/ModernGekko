@@ -5,7 +5,16 @@
         android:allowBackup="false"
         android:label="ModernGekko Android"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".GameActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
         <activity
             android:name=".MainActivity"
