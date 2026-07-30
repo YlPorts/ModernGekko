@@ -9,6 +9,13 @@ on:
       - ".github/workflows/android-baseline.yml"
       - "vendor/dolphin"
       - "docs/android-port.md"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/android-baseline.yml"
+      - "vendor/dolphin"
+      - "docs/android-port.md"
 
 permissions:
   contents: read
@@ -37,7 +44,6 @@ jobs:
       - name: Install Android native toolchain
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platforms;android-36" \
             "build-tools;36.0.0" \
